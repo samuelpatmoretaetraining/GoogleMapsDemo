@@ -1,7 +1,8 @@
 package com.muelpatmore.googlemapsdemo.network;
 
-import com.muelpatmore.googlemapsdemo.apimodels.JustEatModel;
+import com.muelpatmore.googlemapsdemo.apimodels.justeat.JustEatModel;
 import com.muelpatmore.googlemapsdemo.apimodels.geolocate.GeoLocateModel;
+import com.muelpatmore.googlemapsdemo.apimodels.postcodes.PostcodeResultModel;
 import com.muelpatmore.googlemapsdemo.network.utils.Constants;
 
 import io.reactivex.Observable;
@@ -28,4 +29,7 @@ public interface RequestInterface {
 
     @POST(Constants.GEOLOCATE_QUERY)
     Observable<GeoLocateModel> getGeolocationData(@Query("key") String apiKey);
+
+    @GET(Constants.POSTCODE_QUERY)
+    Observable<PostcodeResultModel> getPostCode(@Query("lon") String longitude, @Query("lat") String latitude);
 }

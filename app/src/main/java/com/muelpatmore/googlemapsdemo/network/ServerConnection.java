@@ -31,8 +31,6 @@ public class ServerConnection {
         return retrofit.create(RequestInterface.class);
     }
 
-
-
     public static RequestInterface getGoogleServerConnection() {
 
         okHttpClient= new OkHttpClient.Builder().
@@ -42,6 +40,21 @@ public class ServerConnection {
                 .addConverterFactory(GsonConverterFactory.create())
                 .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
                 .baseUrl(Constants.GOOGLE_BASE_USL)
+                .client(okHttpClient)
+                .build();
+
+        return retrofit.create(RequestInterface.class);
+    }
+
+    public static RequestInterface getPostcodeServerConnection() {
+
+        okHttpClient= new OkHttpClient.Builder().
+                addInterceptor(new HttpLoggingInterceptor()).build();
+
+        retrofit = new Retrofit.Builder()
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .baseUrl(Constants.POSTCODE_BASE_URL)
                 .client(okHttpClient)
                 .build();
 

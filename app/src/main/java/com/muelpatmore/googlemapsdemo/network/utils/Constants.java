@@ -23,6 +23,11 @@ public class Constants {
     // spare string AIzaSyBX4okVoB-lGinjzSaY1L1I_AOC3l5gvrs
 
 
+    //Postcode lookup
+    //https:api.postcodes.io/postcodes?lon=-0.0693&lat=51.5088
+    public static final String POSTCODE_BASE_URL = "https:api.postcodes.io/";
+    public static final String POSTCODE_QUERY = "postcodes";
+
 
     /**
      * Prevent instantiation of this utility class
