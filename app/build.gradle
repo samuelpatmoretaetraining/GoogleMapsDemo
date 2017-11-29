@@ -53,6 +53,7 @@ dependencies {
 
     // Maps
     compile 'com.google.android.gms:play-services-maps:11.6.0'
+    compile 'com.google.android.gms:play-services-location:11.6.0'
     compile 'org.apache.commons:commons-lang3:3.6'
 
 }

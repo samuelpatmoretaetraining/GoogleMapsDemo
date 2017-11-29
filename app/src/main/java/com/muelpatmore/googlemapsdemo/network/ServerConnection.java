@@ -16,7 +16,7 @@ public class ServerConnection {
     private static Retrofit retrofit;
     private static OkHttpClient okHttpClient;
 
-    public static RequestInterface getServerConnection() {
+    public static RequestInterface getJustEatServerConnection() {
 
         okHttpClient= new OkHttpClient.Builder().
                 addInterceptor(new HttpLoggingInterceptor()).build();
@@ -24,9 +24,26 @@ public class ServerConnection {
         retrofit = new Retrofit.Builder()
             .addConverterFactory(GsonConverterFactory.create())
             .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
-            .baseUrl(Constants.BASE_URL)
+            .baseUrl(Constants.JUST_EAT_BASE_URL)
             .client(okHttpClient)
             .build();
+
+        return retrofit.create(RequestInterface.class);
+    }
+
+
+
+    public static RequestInterface getGoogleServerConnection() {
+
+        okHttpClient= new OkHttpClient.Builder().
+                addInterceptor(new HttpLoggingInterceptor()).build();
+
+        retrofit = new Retrofit.Builder()
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .baseUrl(Constants.GOOGLE_BASE_USL)
+                .client(okHttpClient)
+                .build();
 
         return retrofit.create(RequestInterface.class);
     }

@@ -1,9 +1,20 @@
 package com.muelpatmore.googlemapsdemo;
 
-import android.support.v4.app.FragmentActivity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
 import android.os.Bundle;
+import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.FragmentActivity;
 import android.util.Log;
+import android.widget.Toast;
 
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -11,13 +22,17 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.muelpatmore.googlemapsdemo.apimodels.JustEatModel;
 import com.muelpatmore.googlemapsdemo.apimodels.Restaurant;
 import com.muelpatmore.googlemapsdemo.network.AppScheduleProvider;
 import com.muelpatmore.googlemapsdemo.network.ScheduleProvider;
 import com.muelpatmore.googlemapsdemo.network.ServerConnection;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.functions.Consumer;
@@ -28,7 +43,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private static LatLng towerBridge = new LatLng(51.5088, -0.0693);
 
     private GoogleMap mMap;
+    private FusedLocationProviderClient mFusedLocationClient;
+    private GoogleApiClient mGoogleApiClient;
     private ScheduleProvider scheduler;
+    private LatLng myLocation = towerBridge;
 
     private CompositeDisposable bin;
 
@@ -42,14 +60,37 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mapFragment.getMapAsync(this);
         bin = new CompositeDisposable();
         scheduler = new AppScheduleProvider();
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                    0);
+            return;
+        }
+        mFusedLocationClient.getLastLocation()
+                .addOnSuccessListener(this, new OnSuccessListener<Location>() {
+                    @Override
+                    public void onSuccess(Location location) {
+                        if (location != null) {
+                            // Logic to handle location object
+                            Log.i(TAG, "Lat: "+location.getLatitude()+", Lng: "+location.getLongitude());
+                        }
+                    }
+                });
+
 
         getChucksFromApi("e1w");
+
+
     }
+
+
 
     private void getChucksFromApi(final String postcode) {
         bin.add(ServerConnection
-                .getServerConnection()
-                .getChuckList(postcode)
+                .getJustEatServerConnection()
+                .getJustEatList(postcode)
                 .observeOn(scheduler.ui())
                 .subscribeOn(scheduler.io())
                 .subscribe(new Consumer<JustEatModel>() {
@@ -58,7 +99,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         ArrayList<Restaurant> restaurants = new ArrayList<>(chuckModel.getRestaurants());
 
                         for (Restaurant r : restaurants) {
-                            Log.d(TAG, "Drive distance:"+ r.getDriveDistance());
+                            Log.d(TAG, "Drive distance:" + r.getDriveDistance());
                         }
                         Log.d(TAG, restaurants.size() + " total restaurants in " + postcode);
                         addLocationsToMap(restaurants);
@@ -72,22 +113,42 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void addLocationsToMap(ArrayList<Restaurant> restaurantList) {
-        Double range = 3.0;
-        for(Restaurant r : restaurantList) {
+        double range = 1.50;
+        int count = 0;
+        for (Restaurant r : restaurantList) {
             LatLng loc = new LatLng(r.getLatitude(), r.getLongitude());
-            if (r.getDriveDistance() < 2.5000) {
+            if (r.getDriveDistance() != null && r.getDriveDistance() < range) {
+                count++;
                 mMap.addMarker(new MarkerOptions()
                         .position(loc)
                         .title(r.getName())
                         .draggable(true));
-            } else {
-                Log.i(TAG, r.getName() + "is more than 3.0 away. ("+ r.getDriveDistance()+ ")");
             }
         }
+        Log.i(TAG, count+" restaurants found.");
+        Toast.makeText(this, count+" restaurants found.", Toast.LENGTH_SHORT).show();
         bin.dispose();
         bin.clear();
     }
 
+
+    private String getPostcodeFromLatLng(LatLng position) {
+        Geocoder geoCoder = new Geocoder(getApplicationContext(), Locale.getDefault());
+        List<Address> address = null;
+        try {
+            address = geoCoder.getFromLocation(position.latitude, position.longitude, 1);
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+        if (address.size() > 0) {
+            String postCode = address.get(0).getPostalCode();
+            for (Address a : address) {
+                Log.d(TAG, a.getPhone());
+            }
+            return postCode;
+        }
+        return null;
+    }
 
     /**
      * Manipulates the map once available.
@@ -108,6 +169,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .title("Marker in Sydney")
                 .icon(BitmapDescriptorFactory
                         .defaultMarker(BitmapDescriptorFactory.HUE_CYAN)));
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(towerBridge, 12.0f));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(towerBridge, 16.0f));
     }
 }
