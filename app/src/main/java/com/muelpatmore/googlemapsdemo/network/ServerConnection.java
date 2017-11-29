@@ -1,8 +1,10 @@
 package com.muelpatmore.googlemapsdemo.network;
 
 import com.jakewharton.retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory;
+import com.muelpatmore.googlemapsdemo.network.utils.Constants;
 
 import okhttp3.OkHttpClient;
+import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
@@ -15,10 +17,16 @@ public class ServerConnection {
     private static OkHttpClient okHttpClient;
 
     public static RequestInterface getServerConnection() {
+
+        okHttpClient= new OkHttpClient.Builder().
+                addInterceptor(new HttpLoggingInterceptor()).build();
+
         retrofit = new Retrofit.Builder()
-        .addConverterFactory(GsonConverterFactory.create())
-        .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
-        .baseUrl(Constants.BASE_URL).build();
+            .addConverterFactory(GsonConverterFactory.create())
+            .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+            .baseUrl(Constants.BASE_URL)
+            .client(okHttpClient)
+            .build();
 
         return retrofit.create(RequestInterface.class);
     }

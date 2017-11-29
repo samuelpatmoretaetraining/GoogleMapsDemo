@@ -1,4 +1,4 @@
-package com.muelpatmore.googlemapsdemo.network;
+package com.muelpatmore.googlemapsdemo.network.utils;
 
 /**
  * Created by Samuel on 29/11/2017.
@@ -7,7 +7,8 @@ package com.muelpatmore.googlemapsdemo.network;
 public class Constants {
 
     public static final String BASE_URL = "https://public.je-apis.com/";
-    public static final String QUERY = "restaurants?q=e1w";
+    public static final String QUERY = "restaurants";
+    //?q=e1w
 
 
     public static final String HEADER_ACCEPT_TENANT = "Accept-Tenant: uk";

@@ -29,7 +29,7 @@ public class Restaurant {
     private String deliveryOpeningTime;
     @SerializedName("DeliveryCost")
     @Expose
-    private Integer deliveryCost;
+    private float deliveryCost;
     @SerializedName("MinimumDeliveryValue")
     @Expose
     private Double minimumDeliveryValue;
@@ -125,7 +125,7 @@ public class Restaurant {
     private Boolean isOpenNowForCollection;
     @SerializedName("RatingStars")
     @Expose
-    private Integer ratingStars;
+    private float ratingStars;
     @SerializedName("Logo")
     @Expose
     private List<Logo> logo = null;
@@ -192,11 +192,11 @@ public class Restaurant {
         this.deliveryOpeningTime = deliveryOpeningTime;
     }
 
-    public Integer getDeliveryCost() {
+    public float getDeliveryCost() {
         return deliveryCost;
     }
 
-    public void setDeliveryCost(Integer deliveryCost) {
+    public void setDeliveryCost(float deliveryCost) {
         this.deliveryCost = deliveryCost;
     }
 
@@ -448,11 +448,11 @@ public class Restaurant {
         this.isOpenNowForCollection = isOpenNowForCollection;
     }
 
-    public Integer getRatingStars() {
+    public float getRatingStars() {
         return ratingStars;
     }
 
-    public void setRatingStars(Integer ratingStars) {
+    public void setRatingStars(float ratingStars) {
         this.ratingStars = ratingStars;
     }
 
