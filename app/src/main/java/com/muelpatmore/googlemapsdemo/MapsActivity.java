@@ -1,8 +1,9 @@
 package com.muelpatmore.googlemapsdemo;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.Address;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.design.widget.Snackbar;
@@ -31,11 +32,18 @@ import com.muelpatmore.googlemapsdemo.apimodels.justeat.JustEatModel;
 import com.muelpatmore.googlemapsdemo.apimodels.justeat.Restaurant;
 import com.muelpatmore.googlemapsdemo.apimodels.postcodes.PostcodeResultModel;
 import com.muelpatmore.googlemapsdemo.network.AppScheduleProvider;
+import com.muelpatmore.googlemapsdemo.network.FetchLocationCompleteMessage;
 import com.muelpatmore.googlemapsdemo.network.ScheduleProvider;
 import com.muelpatmore.googlemapsdemo.network.ServerConnection;
 import com.squareup.picasso.Picasso;
 
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
+import java.util.Locale;
 
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.functions.Consumer;
@@ -44,69 +52,150 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private final static String TAG = "MapsActivity";
     private final static LatLng DEFAULT_LOCATION = new LatLng(51.5088, -0.0693); // default location
+    private final static String DEFAULT_POSTCODE = "e1w"; // default postcode value
 
     private SupportMapFragment mMapFragment;
     private GoogleMap mMap;
     private FusedLocationProviderClient mFusedLocationClient;
     private GoogleApiClient mGoogleApiClient;
     private ScheduleProvider mScheduleProvider;
+    private Marker myLocation;
     private LatLng myLoc = DEFAULT_LOCATION; //default instantiation
     private ArrayList<Restaurant> mRestaurantArrayList;
+    private LatLng lastLatLng = DEFAULT_LOCATION;
+    private String lastPostcode = DEFAULT_POSTCODE;
 
     private CompositeDisposable bin;
 
 
-    @SuppressLint("MissingPermission") // permissions handled b
+    /**
+     * @Override
+     * Initialises data and starts process to search by the user's location.
+     * @param savedInstanceState stored state of the app before it stopped.
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
+        EventBus.getDefault().register(this);
         bin = new CompositeDisposable();
         mScheduleProvider = new AppScheduleProvider();
-
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         mMapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mMapFragment.getMapAsync(this);
 
-        checkPermissionsFineLocation();
+        searchRestaurantsByUserLocation();
+    }
+    /**
+     * Retrieve user location by GPS then pass this down the lookup chain.
+     * If location cannot be found a default location is used.
+     */
+    public void searchRestaurantsByUserLocation() {
+        checkPermissionsCoarseLocation();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},0);
+        }
+
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        mFusedLocationClient.getLastLocation()
-                .addOnSuccessListener(this, new OnSuccessListener<Location>() {
-                    @Override
-                    public void onSuccess(Location location) {
-                        if (location != null) {
-                            Log.i(TAG, "Lat: "+location.getLatitude()+", Lng: "+location.getLongitude());
-                            myLoc = new LatLng(location.getLatitude(),location.getLongitude());
-                            getPostcodeFromLatLng(myLoc);
-                        }
-                    }
-                });
+        mFusedLocationClient
+                .getLastLocation()
+                .addOnSuccessListener(this,
+                        new OnSuccessListener<Location>() {
+                                @Override
+                                public void onSuccess(@NotNull Location location) {
+                                    if (location != null) {
+                                        Log.i(TAG, "Lat: "+location.getLatitude()+", Lng: "+location.getLongitude());
+                                        myLoc = new LatLng(location.getLatitude(),location.getLongitude());
+                                        Toast.makeText(MapsActivity.this,
+                                                Double.toString(myLoc.latitude)+", "+ Double.toString(myLoc.longitude),
+                                                Toast.LENGTH_SHORT).show();
+                                        //getPostcodeFromLatLng(myLoc); // old method DEPRECATED
+                                        Log.i(TAG, "posting to intent service");
+                                        startIntentService(location);
+
+                                    } else {
+                                        myLoc = DEFAULT_LOCATION;
+                                        Toast.makeText(MapsActivity.this, "Default location used", Toast.LENGTH_SHORT).show();
+                                    }
+                                    plotUserLocation(myLoc);
+                                }
+
+                            });
     }
 
+    private void startIntentService(Location location) {
+        Intent intent = new Intent(this, FetchAddressIntentService.class);
+        intent.putExtra(Constants.LOCATION_DATA_EXTRA, location);
+        startService(intent);
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onMessageEvent(FetchLocationCompleteMessage event) {
+        Log.i(TAG, "Message recieved from intent service.");
+        if (event.coordinates != null) {
+            this.lastLatLng = event.coordinates;
+        }
+        if (event.postCode != null) {
+            this.lastPostcode = event.postCode;
+        } else {
+            Toast.makeText(this, "Cannot resolve postcode from GPS.", Toast.LENGTH_SHORT).show();
+            getPostcodeFromLatLng(lastLatLng);
+        }
 
 
-    private void getChucksFromApi(final String postcode) {
+        plotUserLocation(lastLatLng);
+        getRestaurantListFromApi(lastPostcode);
+    }
+
+    /**
+     *
+     * @param myLoc
+     */
+    private void plotUserLocation(LatLng myLoc) {
+        if (myLocation != null) {
+            myLocation.remove();
+        }
+        myLocation = mMap.addMarker(new MarkerOptions()
+            .position(myLoc)
+            .title("Your location")
+            .icon(BitmapDescriptorFactory
+                    .defaultMarker(BitmapDescriptorFactory.HUE_CYAN)));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(myLoc, 16.0f));
+    }
+
+    /**
+     * Makes connection to JustEat server API for a list of restaurants in the selected postcode.
+     * Results are auto-added to the map;
+     * @param postcode String postcode in which restaurants are being searched for.
+     */
+    private void getRestaurantListFromApi(final String postcode) {
         bin.add(ServerConnection
                 .getJustEatServerConnection()
                 .getJustEatList(postcode)
                 .observeOn(mScheduleProvider.ui())
                 .subscribeOn(mScheduleProvider.io())
                 .subscribe(new Consumer<JustEatModel>() {
-                    @Override
-                    public void accept(JustEatModel chuckModel) throws Exception {
-                        ArrayList<Restaurant> restaurants = new ArrayList<>(chuckModel.getRestaurants());
-                        mRestaurantArrayList = restaurants;
-                        Log.d(TAG, restaurants.size() + " total restaurants in " + postcode);
-                        addLocationsToMap(restaurants);
-                    }
+                        @Override
+                        public void accept(JustEatModel chuckModel) throws Exception {
+                            ArrayList<Restaurant> restaurants = new ArrayList<>(chuckModel.getRestaurants());
+                            mRestaurantArrayList = restaurants;
+                            Log.d(TAG, restaurants.size() + " total restaurants in " + postcode);
+                            addLocationsToMap(restaurants);
+                        }
                 }, new Consumer<Throwable>() {
-                    @Override
-                    public void accept(Throwable throwable) throws Exception {
-                        throwable.printStackTrace();
-                    }
+                        @Override
+                        public void accept(Throwable throwable) throws Exception {
+                            throwable.printStackTrace();
+                        }
                 }));
     }
 
+    /**
+     * Take a list of Restaurant objects and add each to the GoogleMaps by location.
+     * @param restaurantList
+     */
     private void addLocationsToMap(ArrayList<Restaurant> restaurantList) {
         mRestaurantArrayList = restaurantList;
         double range = 1.00;
@@ -123,14 +212,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
             }
         }
-        Log.i(TAG, count + " restaurants found.");
         Toast.makeText(this, count + " restaurants found.", Toast.LENGTH_SHORT).show();
 
+        // set click listener to open a Snackbar on click.
         mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
             @Override
             public boolean onMarkerClick(Marker marker) {
-                int position = (int)(marker.getTag());
-                infoSnackBar(mRestaurantArrayList.get(position));
+                if(!marker.equals(myLocation)) {
+                    int position = (int)(marker.getTag());
+                    infoSnackBar(mRestaurantArrayList.get(position));
+                }
                 return false;
             }
         });
@@ -138,7 +229,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
 
     private void getPostcodeFromLatLng(LatLng position) {
-        final String postcode = "e1w";
         bin.add(ServerConnection.getPostcodeServerConnection()
                 .getPostCode(Double.toString(position.longitude),
                             Double.toString(position.latitude))
@@ -150,9 +240,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         String apiPostcode = postcodeResultModel.getResult().get(0).getPostcode();
                         if (apiPostcode == null) {
                             Toast.makeText(MapsActivity.this, "Default location used.", Toast.LENGTH_SHORT).show();
-                            getChucksFromApi(postcode);
+                            getRestaurantListFromApi(DEFAULT_POSTCODE);
                         } else {
-                            getChucksFromApi(apiPostcode);
+                            getRestaurantListFromApi(apiPostcode);
                             Toast.makeText(MapsActivity.this, "Searching in "+apiPostcode, Toast.LENGTH_SHORT).show();
                         }
                     }
@@ -165,7 +255,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void infoSnackBar(Restaurant restaurant) {
-        Snackbar snackbar = Snackbar.make(getWindow().getDecorView().getRootView(), "Test", Snackbar.LENGTH_LONG);
+        Snackbar snackbar = Snackbar.make(getWindow().getDecorView().getRootView(), "Test", 8000);
         Snackbar.SnackbarLayout layout = (Snackbar.SnackbarLayout) snackbar.getView();
         // Hide the default Snackbar TextView
         TextView textView = (TextView) layout.findViewById(android.support.design.R.id.snackbar_text);
@@ -179,13 +269,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         tvRestaurantName.setText(restaurant.getName());
         Log.i(TAG, restaurant.getName()+" selected");
 
-        TextView tvRatingAverage = (TextView) findViewById(R.id.tvRatingAverage);;
+        TextView tvRatingAverage = (TextView) snackView.findViewById(R.id.tvRatingAverage);;
         Log.e(TAG, "TV null pointer: "+tvRatingAverage);
         String averageRating = Double.toString(restaurant.getRatingAverage());
-        Log.w(TAG, "Null pointer spot: "+averageRating.getClass().getName());
         if(averageRating != null) {tvRatingAverage.setText(averageRating);}
 
-        TextView tvOpenNow = (TextView) findViewById(R.id.tvOpenNow);
+        TextView tvOpenNow = (TextView) snackView.findViewById(R.id.tvOpenNow);
         String openNow = restaurant.getIsOpenNow() ? "Open now" : "Closed";
         if(openNow != null) {tvOpenNow.setText(openNow);}
 
@@ -193,10 +282,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         String restaurantImageUrl = restaurant.getLogo().get(0).getStandardResolutionURL();
         if (restaurantImageUrl != null) {
             Picasso
-                    .with(this)
-                    .load(restaurant.getLogo().get(0).getStandardResolutionURL())
-                    .resize(100, 100) // resizes the image to these dimensions (in pixel). does not respect aspect ratio
-                    .into(ivRestaurantImage);
+                .with(this)
+                .load(restaurant.getLogo().get(0).getStandardResolutionURL())
+                .resize(100, 100)
+                .into(ivRestaurantImage);
         }
 
         // Add the view to the Snackbar's layout
@@ -217,16 +306,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-
-        // Add a marker in Sydney and move the camera
-        mMap.addMarker(new MarkerOptions()
-                .position(DEFAULT_LOCATION)
-                .title("Marker in Sydney")
-                .icon(BitmapDescriptorFactory
-                        .defaultMarker(BitmapDescriptorFactory.HUE_CYAN)));
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(DEFAULT_LOCATION, 16.0f));
     }
 
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        EventBus.getDefault().unregister(this);
+    }
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -239,19 +326,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      */
     private void checkPermissionsCoarseLocation() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},0);
-            return;
-        }
-    }
-
-
-    /**
-     * Ensure user has given app permission to use the device's FINE_LOCATION.
-     */
-    private void checkPermissionsFineLocation() {
-        checkPermissionsCoarseLocation();
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},0);
             return;
