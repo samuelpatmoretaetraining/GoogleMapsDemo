@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="100dp">
+    android:layout_height="100dp"
+    android:background="@color/colorWhite">
 
     <ImageView
         android:id="@+id/ivRestaurantImage"
@@ -20,6 +21,7 @@
         android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
         android:text="TextView"
+        android:textColor="@color/colorTextBlack"
         android:textSize="18dp"
         app:layout_constraintStart_toEndOf="@+id/ivRestaurantImage"
         app:layout_constraintTop_toTopOf="parent" />
@@ -31,6 +33,7 @@
         android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
         android:text="TextView"
+        android:textColor="@color/colorTextBlack"
         app:layout_constraintStart_toEndOf="@+id/ivRestaurantImage"
         app:layout_constraintTop_toBottomOf="@+id/tvRestaurantName" />
 
@@ -42,6 +45,7 @@
         android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
         android:text="TextView"
+        android:textColor="@color/colorTextRed"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toEndOf="@+id/ivRestaurantImage"
         app:layout_constraintTop_toBottomOf="@+id/tvRatingAverage" />

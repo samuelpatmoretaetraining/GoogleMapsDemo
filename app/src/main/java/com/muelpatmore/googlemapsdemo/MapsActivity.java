@@ -3,7 +3,6 @@ package com.muelpatmore.googlemapsdemo;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.location.Address;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.design.widget.Snackbar;
@@ -35,6 +34,7 @@ import com.muelpatmore.googlemapsdemo.network.AppScheduleProvider;
 import com.muelpatmore.googlemapsdemo.network.FetchLocationCompleteMessage;
 import com.muelpatmore.googlemapsdemo.network.ScheduleProvider;
 import com.muelpatmore.googlemapsdemo.network.ServerConnection;
+import com.muelpatmore.googlemapsdemo.network.utils.Constants;
 import com.squareup.picasso.Picasso;
 
 import org.greenrobot.eventbus.EventBus;
@@ -43,8 +43,9 @@ import org.greenrobot.eventbus.ThreadMode;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Locale;
+import java.util.List;
 
+import io.reactivex.Observable;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.functions.Consumer;
 
@@ -108,10 +109,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                                     if (location != null) {
                                         Log.i(TAG, "Lat: "+location.getLatitude()+", Lng: "+location.getLongitude());
                                         myLoc = new LatLng(location.getLatitude(),location.getLongitude());
-                                        Toast.makeText(MapsActivity.this,
-                                                Double.toString(myLoc.latitude)+", "+ Double.toString(myLoc.longitude),
-                                                Toast.LENGTH_SHORT).show();
-                                        //getPostcodeFromLatLng(myLoc); // old method DEPRECATED
+                                        Log.i(TAG,Double.toString(myLoc.latitude)+", "+ Double.toString(myLoc.longitude));
                                         Log.i(TAG, "posting to intent service");
                                         startIntentService(location);
 
@@ -140,7 +138,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (event.postCode != null) {
             this.lastPostcode = event.postCode;
         } else {
-            Toast.makeText(this, "Cannot resolve postcode from GPS.", Toast.LENGTH_SHORT).show();
+            Log.i(TAG, "Cannot resolve postcode from GPS.");
             getPostcodeFromLatLng(lastLatLng);
         }
 
@@ -174,21 +172,30 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         bin.add(ServerConnection
                 .getJustEatServerConnection()
                 .getJustEatList(postcode)
+                .map(s -> {
+                    return s.getRestaurants();
+                })
+                .flatMap(s ->Observable.fromIterable(s))
+                .filter(s -> {
+                    return s.getIsOpenNow() && !s.getIsHalal();
+                })
+                .toList()
                 .observeOn(mScheduleProvider.ui())
                 .subscribeOn(mScheduleProvider.io())
-                .subscribe(new Consumer<JustEatModel>() {
-                        @Override
-                        public void accept(JustEatModel chuckModel) throws Exception {
-                            ArrayList<Restaurant> restaurants = new ArrayList<>(chuckModel.getRestaurants());
-                            mRestaurantArrayList = restaurants;
-                            Log.d(TAG, restaurants.size() + " total restaurants in " + postcode);
-                            addLocationsToMap(restaurants);
-                        }
+                .subscribe(new Consumer<List<Restaurant>>() {
+                    @Override
+                    public void accept(List<Restaurant> restaurants) throws Exception {
+                        ArrayList<Restaurant> restaurantList = new ArrayList<>(restaurants);
+                        mRestaurantArrayList = restaurantList;
+                        Toast.makeText(MapsActivity.this, "Total results: "+ restaurantList.size(), Toast.LENGTH_SHORT).show();
+                        Log.d(TAG, restaurants.size() + " total restaurants in " + postcode);
+                        addLocationsToMap(restaurantList);
+                    }
                 }, new Consumer<Throwable>() {
-                        @Override
-                        public void accept(Throwable throwable) throws Exception {
-                            throwable.printStackTrace();
-                        }
+                    @Override
+                    public void accept(Throwable throwable) throws Exception {
+
+                    }
                 }));
     }
 
@@ -198,21 +205,18 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
      */
     private void addLocationsToMap(ArrayList<Restaurant> restaurantList) {
         mRestaurantArrayList = restaurantList;
+        // clear all markers on the map
+        mMap.clear();
         double range = 1.00;
         int count = 0;
         for (Restaurant r : restaurantList) {
             LatLng loc = new LatLng(r.getLatitude(), r.getLongitude());
-            if (r.getDriveDistance() != null && r.getDriveDistance() < range) {
-                count++;
-                Marker marker = mMap.addMarker(new MarkerOptions()
-                        .position(loc)
-                        .title(r.getName())
-                        .draggable(true));
-                marker.setTag(restaurantList.indexOf(r));
-
-            }
+            Marker marker = mMap.addMarker(new MarkerOptions()
+                    .position(loc)
+                    .title(r.getName())
+                    .draggable(true));
+            marker.setTag(restaurantList.indexOf(r));
         }
-        Toast.makeText(this, count + " restaurants found.", Toast.LENGTH_SHORT).show();
 
         // set click listener to open a Snackbar on click.
         mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
@@ -269,14 +273,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         tvRestaurantName.setText(restaurant.getName());
         Log.i(TAG, restaurant.getName()+" selected");
 
-        TextView tvRatingAverage = (TextView) snackView.findViewById(R.id.tvRatingAverage);;
-        Log.e(TAG, "TV null pointer: "+tvRatingAverage);
+        TextView tvRatingAverage = (TextView) snackView.findViewById(R.id.tvRatingAverage);
         String averageRating = Double.toString(restaurant.getRatingAverage());
         if(averageRating != null) {tvRatingAverage.setText(averageRating);}
 
         TextView tvOpenNow = (TextView) snackView.findViewById(R.id.tvOpenNow);
         String openNow = restaurant.getIsOpenNow() ? "Open now" : "Closed";
         if(openNow != null) {tvOpenNow.setText(openNow);}
+        if(restaurant.getIsOpenNow()) {tvOpenNow.setTextColor(this.getResources().getColor(R.color.colorTextGreen));}
 
         ImageView ivRestaurantImage = (ImageView) snackView.findViewById(R.id.ivRestaurantImage);
         String restaurantImageUrl = restaurant.getLogo().get(0).getStandardResolutionURL();
@@ -290,6 +294,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         // Add the view to the Snackbar's layout
         layout.addView(snackView, 0);
+        layout.setPadding(0, 0, 0, 0);
         // Show the Snackbar
         snackbar.show();
     }

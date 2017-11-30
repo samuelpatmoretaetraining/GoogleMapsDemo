@@ -9,18 +9,15 @@ import android.content.Intent;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
-import android.os.Bundle;
 import android.os.ResultReceiver;
-import android.text.TextUtils;
 import android.util.Log;
 
 import com.muelpatmore.googlemapsdemo.network.FetchLocationCompleteMessage;
+import com.muelpatmore.googlemapsdemo.network.utils.Constants;
 
 import org.greenrobot.eventbus.EventBus;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
